@@ -24,6 +24,8 @@ export default function Pomodoro() {
         return savedLongBreakTime ? Number(savedLongBreakTime) : 15;
     });
 
+    const [audio] = useState(new Audio('/chime.mp3')); // Assuming chime.mp3 is in public folder
+
     useEffect(() => {
         const websocket = new WebSocket(WS_URL);
         setWs(websocket);
@@ -65,6 +67,13 @@ export default function Pomodoro() {
     const convertToSeconds = (minutes) => {
         return minutes * 60;
     };
+
+    // Check if time is 0 and play the chime
+    useEffect(() => {
+        if (time === 0 && running) {
+            audio.play();
+        }
+    }, [time, running, audio]);
 
     return (
         <div>
