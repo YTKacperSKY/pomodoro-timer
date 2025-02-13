@@ -1,12 +1,16 @@
 import './style.css';
 import { useEffect, useState } from "react";
 
-const WS_URL = "ws://localhost:8080";
-
 export default function Pomodoro() {
     const [time, setTime] = useState(1500);
     const [running, setRunning] = useState(false);
     const [ws, setWs] = useState(null);
+
+    // Persistent state for the session name
+    const [sessionName, setSessionName] = useState('');
+
+    // Temporary state for input field
+    const [tempSessionName, setTempSessionName] = useState('');
 
     // Load initial timer values from localStorage or use default values
     const [pomodoroTime, setPomodoroTime] = useState(() => {
@@ -24,9 +28,12 @@ export default function Pomodoro() {
         return savedLongBreakTime ? Number(savedLongBreakTime) : 15;
     });
 
-    const [audio] = useState(new Audio('/chime.mp3')); // Assuming chime.mp3 is in public folder
+    // Audio setup for chime
+    const [audio] = useState(new Audio('/chime.mp3'));
 
-    useEffect(() => {
+    const connectWebSocket = (encodedSessionName) => {
+        const WS_URL = `wss://pomodoro-be.ytkacpersky.de/${encodedSessionName}`;
+
         const websocket = new WebSocket(WS_URL);
         setWs(websocket);
 
@@ -36,11 +43,37 @@ export default function Pomodoro() {
             setRunning(data.running);
         };
 
+        // Cleanup WebSocket connection on unmount or when sessionName changes
+        return () => websocket.close();
+    };
+
+    useEffect(() => {
+        // Get session name from URL query parameters only on first load
+        const urlParams = new URLSearchParams(window.location.search);
+        const querySessionName = urlParams.get('session') || ''; // Use empty string if no session parameter
+
+        // Only set the sessionName if it's not already set
+        if (sessionName === '') {
+            setSessionName(querySessionName);
+            setTempSessionName(querySessionName); // Set the initial value of the text field
+        }
+    }, []); // This effect runs only on component mount
+
+    useEffect(() => {
+        const encodedSessionName = sessionName.trim().length === 0 ? "" : sessionName.replace(/\s+/g, '_');
+        // Initialize WebSocket only once
+        const cleanupWebSocket = connectWebSocket(encodedSessionName);
+
+        // Update the URL with the new session name
+        if (sessionName.trim().length > 0) {
+            window.history.pushState({}, '', `?session=${encodedSessionName}`);
+        } else {
+            window.history.pushState({}, '', window.location.pathname); // Remove session from URL if empty
+        }
+
         // Cleanup WebSocket connection on unmount
-        return () => {
-            websocket.close();
-        };
-    }, []); // Empty array ensures this effect runs only once (on mount)
+        return cleanupWebSocket;
+    }, [sessionName]); // Only reconnect if sessionName changes
 
     const sendAction = (action, newTime = null) => {
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -56,7 +89,7 @@ export default function Pomodoro() {
         }
     };
 
-    // Save the updated timer values to localStorage when they change
+    // Save timer values to localStorage
     useEffect(() => {
         localStorage.setItem('pomodoroTime', pomodoroTime);
         localStorage.setItem('shortBreakTime', shortBreakTime);
@@ -68,16 +101,43 @@ export default function Pomodoro() {
         return minutes * 60;
     };
 
-    // Check if time is 0 and play the chime
+    // Play chime when timer hits 0
     useEffect(() => {
         if (time === 0 && running) {
             audio.play();
         }
     }, [time, running, audio]);
 
+    // Handle session name change button click or Enter press
+    const handleSessionChange = () => {
+        setSessionName(tempSessionName.trim().length === 0 ? "" : tempSessionName.replace(/\s+/g, '_'));
+    };
+
+    const handleKeyPress = (e) => {
+        if (e.key === "Enter") {
+            handleSessionChange();
+        }
+    };
+
     return (
         <div>
             <h1>Pomodoro Timer</h1>
+            
+            <div>
+                <label>
+                    Session Name (max 16 chars): 
+                    <input
+                        type="text"
+                        maxLength="16"
+                        value={tempSessionName}
+                        onChange={(e) => setTempSessionName(e.target.value)} // Update temp session name on input change
+                        onKeyPress={handleKeyPress} // Update session name on Enter key press
+                        placeholder="Enter session name"
+                    />
+                </label>
+                <button onClick={handleSessionChange}>Change Session</button>
+            </div>
+
             <div>
                 <button onClick={() => sendAction("set", convertToSeconds(pomodoroTime))}>Pomodoro</button>
                 <button onClick={() => sendAction("set", convertToSeconds(shortBreakTime))}>Short Break</button>

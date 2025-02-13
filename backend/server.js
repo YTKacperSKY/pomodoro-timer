@@ -1,61 +1,73 @@
 const WebSocket = require('ws');
+const { parse } = require('url');
 
 const wss = new WebSocket.Server({ port: 8080 });
 
-let timer = { time: 1500, running: false };
-let interval = null;
-let lastSetTime = 1500;  // Store the last set time
+let sessions = {}; // Store timers for each session
 
-const broadcast = (data) => {
+const broadcast = (sessionId, data) => {
+    // Create a new object without the `interval` property
+    const dataToSend = { ...data };
+    delete dataToSend.interval;  // Remove the `interval` property
+
     wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(data));
+        if (client.readyState === WebSocket.OPEN && client.sessionId === sessionId) {
+            client.send(JSON.stringify(dataToSend));
         }
     });
 };
 
-wss.on('connection', (ws) => {
-    console.log('🔗 New client connected');
-    ws.send(JSON.stringify(timer));
+wss.on('connection', (ws, req) => {
+    const { pathname } = parse(req.url, true);
+    const sessionId = pathname.slice(1) || "default";
+
+    ws.sessionId = sessionId;
+
+    // Initialize session if it doesn't exist
+    if (!sessions[sessionId]) {
+        sessions[sessionId] = { time: 1500, running: false, interval: null, lastSetTime: 1500 };
+    }
+
+    const session = sessions[sessionId];
+
+    console.log(`🔗 Client connected to session: ${sessionId}`);
+    broadcast(sessionId, session)
 
     ws.on('message', (message) => {
         const data = JSON.parse(message);
-        console.log(`📌 Action received: ${data.action}`, data.time ? `| Time: ${data.time}s` : '');
+        console.log(`📌 [${sessionId}] Action: ${data.action}`, data.time ? `| Time: ${data.time}s` : '');
 
-        if (data.action === 'start' && !timer.running) {
-            timer.running = true;
-            interval = setInterval(() => {
-                if (timer.time > 0) {
-                    timer.time--;
-                    broadcast(timer);
+        if (data.action === 'start' && !session.running) {
+            session.running = true;
+            session.interval = setInterval(() => {
+                if (session.time > 0) {
+                    session.time--;
+                    broadcast(sessionId, session);
                 } else {
-                    clearInterval(interval);
-                    timer.running = false;
-                    broadcast(timer);
+                    clearInterval(session.interval);
+                    session.running = false;
+                    broadcast(sessionId, session);
                 }
             }, 1000);
         } else if (data.action === 'pause') {
-            timer.running = false;
-            clearInterval(interval);
-            interval = null;
-            broadcast(timer);
+            session.running = false;
+            clearInterval(session.interval);
+            broadcast(sessionId, session);
         } else if (data.action === 'reset') {
-            timer.time = lastSetTime;  // Reset to last set time
-            timer.running = false;
-            clearInterval(interval);
-            interval = null;
-            broadcast(timer);
+            session.time = session.lastSetTime;
+            session.running = false;
+            clearInterval(session.interval);
+            broadcast(sessionId, session);
         } else if (data.action === 'set' && data.time) {
-            lastSetTime = data.time;  // Update last set time
-            timer.time = data.time;
-            timer.running = false;
-            clearInterval(interval);
-            interval = null;
-            broadcast(timer);
+            session.time = data.time;
+            session.lastSetTime = data.time; // Save last set time
+            session.running = false;
+            clearInterval(session.interval);
+            broadcast(sessionId, session);
         }
     });
 
     ws.on('close', () => {
-        console.log('❌ Client disconnected');
+        console.log(`❌ Client disconnected from session: ${sessionId}`);
     });
 });
