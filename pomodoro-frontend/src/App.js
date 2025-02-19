@@ -50,7 +50,7 @@ export default function Pomodoro() {
     useEffect(() => {
         // Get session name from URL query parameters only on first load
         const urlParams = new URLSearchParams(window.location.search);
-        const querySessionName = urlParams.get('session') || ''; // Use empty string if no session parameter
+        const querySessionName = urlParams.get('session') || localStorage.getItem('sessionName') || ''; // Use localStorage if no session parameter
 
         // Only set the sessionName if it's not already set
         if (sessionName === '') {
@@ -110,7 +110,9 @@ export default function Pomodoro() {
 
     // Handle session name change button click or Enter press
     const handleSessionChange = () => {
-        setSessionName(tempSessionName.trim().length === 0 ? "" : tempSessionName.replace(/\s+/g, '_'));
+        const newSessionName = tempSessionName.trim().length === 0 ? "" : tempSessionName.replace(/\s+/g, '_');
+        setSessionName(newSessionName);
+        localStorage.setItem('sessionName', newSessionName); // Save session name to localStorage
     };
 
     const handleKeyPress = (e) => {
