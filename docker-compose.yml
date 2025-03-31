@@ -4,6 +4,7 @@ services:
     build:
       context: ./pomodoro-frontend
       dockerfile: Dockerfile
+    restart: unless-stopped
     expose:
       - 80
     environment:
@@ -16,6 +17,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    restart: unless-stopped
     expose:
       - 8080
     environment:
@@ -26,5 +28,5 @@ services:
 
 networks:
   default:
-    external:
-      name: compose-net
+    name: compose-net
+    external: true
