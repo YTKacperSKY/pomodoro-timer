@@ -5,7 +5,7 @@ const PORT = process.env.PORT || 8080;
 const server = http.createServer();
 const wss = new WebSocket.Server({ server });
 
-const defaultPomodoro = 5 //25 * 60; // Default time in seconds
+const defaultPomodoro = 25 * 60; // Default time in seconds
 const defaultShortBreak = 5 * 60; // Default short break time in seconds
 const defaultLongBreak = 15 * 60; // Default long break time in seconds
 const defaultRunning = false; // Default running state
