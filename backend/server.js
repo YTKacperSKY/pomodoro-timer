@@ -1,73 +1,228 @@
 const WebSocket = require('ws');
-const { parse } = require('url');
+const http = require('http');
 
-const wss = new WebSocket.Server({ port: 8080 });
+const PORT = process.env.PORT || 8080;
+const server = http.createServer();
+const wss = new WebSocket.Server({ server });
 
-let sessions = {}; // Store timers for each session
+const defaultPomodoro = 5 //25 * 60; // Default time in seconds
+const defaultShortBreak = 5 * 60; // Default short break time in seconds
+const defaultLongBreak = 15 * 60; // Default long break time in seconds
+const defaultRunning = false; // Default running state
 
-const broadcast = (sessionId, data) => {
-    // Create a new object without the `interval` property
-    const dataToSend = { ...data };
-    delete dataToSend.interval;  // Remove the `interval` property
+const sessions = new Map();
 
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN && client.sessionId === sessionId) {
-            client.send(JSON.stringify(dataToSend));
-        }
-    });
-};
 
 wss.on('connection', (ws, req) => {
-    const { pathname } = parse(req.url, true);
-    const sessionId = pathname.slice(1) || "default";
-
-    ws.sessionId = sessionId;
-
-    // Initialize session if it doesn't exist
-    if (!sessions[sessionId]) {
-        sessions[sessionId] = { time: 1500, running: false, interval: null, lastSetTime: 1500 };
-    }
-
-    const session = sessions[sessionId];
-
-    console.log(`🔗 Client connected to session: ${sessionId}`);
-    broadcast(sessionId, session)
+    console.log('Client connected from', req.socket.remoteAddress);
+    ws.remoteAddress = req.socket.remoteAddress;
+    ws.sessionId = null;
 
     ws.on('message', (message) => {
-        const data = JSON.parse(message);
-        console.log(`📌 [${sessionId}] Action: ${data.action}`, data.time ? `| Time: ${data.time}s` : '');
+        let data;
+        try {
+            data = JSON.parse(message);
+        } catch (error) {
+            sendError(ws, 'Invalid JSON format');
+            return;
+        }
 
-        if (data.action === 'start' && !session.running) {
-            session.running = true;
-            session.interval = setInterval(() => {
-                if (session.time > 0) {
-                    session.time--;
-                    broadcast(sessionId, session);
-                } else {
-                    clearInterval(session.interval);
-                    session.running = false;
-                    broadcast(sessionId, session);
-                }
-            }, 1000);
-        } else if (data.action === 'pause') {
-            session.running = false;
-            clearInterval(session.interval);
-            broadcast(sessionId, session);
-        } else if (data.action === 'reset') {
-            session.time = session.lastSetTime;
-            session.running = false;
-            clearInterval(session.interval);
-            broadcast(sessionId, session);
-        } else if (data.action === 'set' && data.time) {
-            session.time = data.time;
-            session.lastSetTime = data.time; // Save last set time
-            session.running = false;
-            clearInterval(session.interval);
-            broadcast(sessionId, session);
+        if (!data.type) {
+            sendError(ws, 'Missing message type');
+            return;
+        }
+
+        switch (data.type) {
+            case 'joinSession':
+                handleJoinSession(ws, data);
+                break;
+            case 'startTimer':
+                handleStartTimer(ws);
+                break;
+            case 'pauseTimer':
+                handlePauseTimer(ws);
+                break;
+            case 'resetTimer':
+                handleResetTimer(ws);
+                break;
+            case 'setTime':
+                handleSetTime(ws, data);
+                break;
+            case 'setPresets':
+                handleSetPresets(ws, data);
+                break;
+            case 'leaveSession':
+                handleLeaveSession(ws);
+                break;
+            case 'ping':
+                handlePing(ws);
+                break;
+            default:
+                sendError(ws, 'Unknown message type');
+                break;
         }
     });
 
     ws.on('close', () => {
-        console.log(`❌ Client disconnected from session: ${sessionId}`);
+        console.log('Client disconnected from', ws.remoteAddress);
+        handleLeaveSession(ws);
     });
+});
+
+// --- HANDLER FUNCTIONS ---
+
+function handleJoinSession(ws, data) {
+    const sessionId = data.sessionId;
+    if (!sessionId) {
+        sendError(ws, 'No session name provided');
+        return;
+    }
+
+    // Leave previous session, if present
+    if (ws.sessionId && ws.sessionId !== sessionId) {
+        handleLeaveSession(ws);
+    }
+
+    ws.sessionId = sessionId;
+
+    if (!sessions.has(sessionId)) {
+        sessions.set(sessionId, {
+            sessionId,
+            isRunning: defaultRunning,
+            remainingTime: defaultPomodoro,
+            initialTime: defaultPomodoro,
+            presets: {
+                pomodoro: defaultPomodoro,
+                shortBreak: defaultShortBreak,
+                longBreak: defaultLongBreak
+            }
+        });
+    }
+
+    const session = sessions.get(sessionId);
+    sendTimerState(ws, session);
+}
+
+function handleStartTimer(ws) {
+    withSession(ws, (session, sessionId) => {
+        if(session.isRunning) {
+            sendError(ws, 'Timer already running');
+            return;
+        }
+    
+        session.isRunning = true;
+        broadcast(sessionId);
+        session.interval = setInterval(() => {
+            if ( session.remainingTime > 0) {
+                session.remainingTime--;
+            } else {
+                clearInterval(session.interval);
+                session.isRunning = false;
+            }
+            broadcast(sessionId);
+        }, 1000);
+    });    
+}
+
+function handlePauseTimer(ws) {
+    withSession(ws, (session, sessionId) => {
+        session.isRunning = false;
+        clearInterval(session.interval);
+        broadcast(sessionId);
+    });
+}
+
+function handleResetTimer(ws) {
+    withSession(ws, (session, sessionId) => {
+        session.remainingTime = session.initialTime;
+        session.isRunning = false;
+        clearInterval(session.interval);
+        broadcast(sessionId);
+    });
+}
+
+function handleSetTime(ws, data) {
+    withSession(ws, (session, sessionId) => {
+        const inputTime = data.remainingTime;
+
+        if (typeof inputTime === 'number') {
+            session.remainingTime = inputTime;
+            session.initialTime = inputTime;
+            session.isRunning = false;
+            clearInterval(session.interval);
+            broadcast(sessionId);
+        } else {
+            sendError(ws, 'Input not a number');
+        }
+    });
+}
+
+function handleSetPresets(ws, data) {
+    withSession(ws, (session, sessionId) => {
+        const {pomodoro, shortBreak, longBreak} = data;
+
+        if (typeof pomodoro === 'number' && typeof shortBreak === 'number' && typeof longBreak === 'number') {
+            session.presets.pomodoro = pomodoro;
+            session.presets.shortBreak = shortBreak;
+            session.presets.longBreak = longBreak;
+            broadcast(sessionId)
+        } else {
+            sendError(ws, 'Input not a number');
+        }
+    });
+}
+
+function handleLeaveSession(ws) {
+    ws.sessionId = null;
+}
+
+function handlePing(ws) {
+    ws.send(JSON.stringify({ type: 'pong' }));
+}
+
+function broadcast(sessionId) {
+    if (!sessionId || !sessions.has(sessionId)) {
+        return;
+    }
+
+    const session = sessions.get(sessionId);
+
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN && client.sessionId === sessionId) {
+            sendTimerState(client, session)
+        }
+    });
+}
+
+function sendTimerState(ws, session) {
+    const sessionToSend = { ...session }
+    delete sessionToSend.interval;
+    ws.send(JSON.stringify({
+        type: 'timer',
+        timer: sessionToSend
+    }))
+}
+
+function withSession(ws, handler) {
+  const sessionId = ws.sessionId;
+  if (!sessionId || !sessions.has(sessionId)) {
+    sendError(ws, 'Session not found');
+    return;
+  }
+
+  const session = sessions.get(sessionId);
+  handler(session, sessionId);
+}
+
+function sendError(ws, message) {
+    console.error('Error: %s by %s', message, ws.remoteAddress);
+    ws.send(JSON.stringify({
+        type: 'error',
+        message
+    }));
+}
+
+// start server
+server.listen(PORT, () => {
+    console.log(`WebSocket server running on ws://localhost:${PORT}`);
 });
