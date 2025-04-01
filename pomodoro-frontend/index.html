@@ -142,6 +142,10 @@
         const minutes = Math.floor(remaining / 60).toString().padStart(2, '0');
         const seconds = (remaining % 60).toString().padStart(2, '0');
         document.getElementById('timer').textContent = `${minutes}:${seconds}`;
+        
+        // Update the tab title with the timer
+        document.title = `[${minutes}:${seconds}] Pomodoro Timer`;
+
         if (remaining === 0 && isRunning) {
           const chime = new Audio('chime.mp3');
           chime.play();
