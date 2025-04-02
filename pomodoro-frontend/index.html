@@ -34,16 +34,16 @@
     <div class="mt-3 d-flex justify-content-center">
       <button class="btn btn-outline-primary me-4" onclick="setTimeFromPreset('pomodoro')" 
             data-bs-toggle="tooltip" data-bs-placement="top" 
-            data-bs-original-title="Pomodoro time: -- min" 
-            onmouseenter="this.setAttribute('data-bs-original-title', 'Pomodoro time: ' + document.getElementById('presetPomodoro').value + ' min')">Pomodoro</button>
+            data-bs-original-title="Pomodoro: -- min" 
+            onmouseenter="this.setAttribute('data-bs-original-title', 'Pomodoro: ' + document.getElementById('presetPomodoro').value + ' min')">Pomodoro</button>
       <button class="btn btn-outline-primary me-4" onclick="setTimeFromPreset('shortBreak')" 
             data-bs-toggle="tooltip" data-bs-placement="top" 
-            data-bs-original-title="Short Break time: -- min" 
-            onmouseenter="this.setAttribute('data-bs-original-title', 'Short Break time: ' + document.getElementById('presetShortBreak').value + ' min')">Short Break</button>
+            data-bs-original-title="Short Break: -- min" 
+            onmouseenter="this.setAttribute('data-bs-original-title', 'Short Break: ' + document.getElementById('presetShortBreak').value + ' min')">Short Break</button>
       <button class="btn btn-outline-primary" onclick="setTimeFromPreset('longBreak')" 
             data-bs-toggle="tooltip" data-bs-placement="top" 
-            data-bs-original-title="Long Break time: -- min" 
-            onmouseenter="this.setAttribute('data-bs-original-title', 'Long Break time: ' + document.getElementById('presetLongBreak').value + ' min')">Long Break</button>
+            data-bs-original-title="Long Break: -- min" 
+            onmouseenter="this.setAttribute('data-bs-original-title', 'Long Break: ' + document.getElementById('presetLongBreak').value + ' min')">Long Break</button>
     </div>
 
     <script>
@@ -94,6 +94,8 @@
               document.getElementById('presetShortBreak').value = parseTimeToString(msg.timer.presets.shortBreak);
               document.getElementById('presetLongBreak').value = parseTimeToString(msg.timer.presets.longBreak);
             }
+
+            highlightActivePreset(msg.timer.initialTime, msg.timer.presets);
           } else if (msg.type === 'error') {
             console.log(msg.message);
           }
@@ -234,6 +236,23 @@
           document.getElementById('soundWarning').style.display = 'none';
         }).catch((err) => {
           console.warn('Audio not yet allowed:', err);
+        });
+      }
+
+      function highlightActivePreset(remainingTime, presets) {
+        const presetTimes = {
+          pomodoro: presets.pomodoro,
+          shortBreak: presets.shortBreak,
+          longBreak: presets.longBreak
+        };
+
+        Object.keys(presetTimes).forEach(type => {
+          const button = document.querySelector(`button[onclick="setTimeFromPreset('${type}')"]`);
+          if (button) {
+            const isActive = remainingTime === presetTimes[type];
+            button.classList.toggle('btn-primary', isActive);
+            button.classList.toggle('btn-outline-primary', !isActive);
+          }
         });
       }
 
