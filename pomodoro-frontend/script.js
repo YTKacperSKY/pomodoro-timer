@@ -19,6 +19,14 @@ let audioUnlocked = false;
 let connectedSessionId = null;
 let muteChime;
 
+setInterval(() => {
+    // check if ws is null or not open
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        initWebSocket();
+        console.log('WebSocket timeout detected. Connection re-established...');
+    }
+}, 1000);
+
 function initWebSocket() {
   ws = new WebSocket('wss://pomodoro-be.ytkacpersky.de');
   ws.onopen = () => {
@@ -86,7 +94,6 @@ function connect() {
   if (!sessionId) {
     sessionId = getSessionIdFromUrlOrStorage();
     if (!sessionId) {
-      alert('Please enter a session name.');
       return;
     }
     document.getElementById('sessionId').value = sessionId;
