@@ -20,8 +20,8 @@ let connectedSessionId = null;
 let muteChime;
 
 setInterval(() => {
-    // check if ws is null or not open
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+    // check if ws is null, not open, or not connecting
+    if (!ws || (ws.readyState !== WebSocket.OPEN && ws.readyState !== WebSocket.CONNECTING)) {
         initWebSocket();
         console.log('WebSocket timeout detected. Connection re-established...');
     }
