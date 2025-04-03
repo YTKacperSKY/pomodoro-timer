@@ -25,7 +25,7 @@ The **Synced Pomodoro Timer** is a collaborative productivity tool that allows m
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/pomodoro-timer.git
+git clone https://github.com/YTKacperSKY/pomodoro-timer.git
 cd pomodoro-timer
 ```
 
