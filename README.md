@@ -2,17 +2,13 @@
 
 The **Synced Pomodoro Timer** is a collaborative productivity tool that allows multiple users to join a shared session and synchronize their Pomodoro timers. It supports real-time updates, customizable presets, and session persistence.
 
+![Frontend Screenshot](http://i.ytkacpersky.de/u/snhu0m.png)
+
 ## Features
 
 - **Real-Time Synchronization**: Multiple users can join the same session and see timer updates in real-time.
 - **Customizable Presets**: Adjust Pomodoro, short break, and long break durations to suit your workflow.
 - **Session Persistence**: Automatically reconnect to the last session using local storage or URL parameters.
-
-### Frontend Screenshot
-
-![Frontend Screenshot](http://i.ytkacpersky.de/u/snhu0m.png)
-
-Replace `path/to/screenshot.png` with the actual path to your screenshot file.
 
 ## Project Structure
 
